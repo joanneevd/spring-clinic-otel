@@ -40,26 +40,23 @@ jobs:
           chmod +x otel-cli
           sudo mv otel-cli /usr/local/bin/
 
-      - name: Run Build and Test as a single Trace
+      - name: Start parent span
         run: |
-          # buat folder socket
           mkdir -p /tmp/otel
+          otel-cli span background --name workflow-run --service spring-petclinic-workflow --tp-carrier /tmp/otel/traceparent.txt &
+          echo $! > /tmp/otel/parent_pid.txt
+          sleep 2
 
-          # Start parent span
-          otel-cli span start -n workflow-run -s spring-petclinic-workflow -a workflow.name=build-and-test --sockdir /tmp/otel &
+      - name: Build Spring Petclinic (child span)
+        run: |
+          PARENT_PID=$(cat /tmp/otel/parent_pid.txt)
+          otel-cli exec --tp-carrier /tmp/otel/traceparent.txt --name build-app -- mvn clean package -DskipTests -Dcheckstyle.skip=true
 
-          # Capture parent span PID
-          PARENT_PID=$!
+      - name: Run Tests (child span)
+        run: |
+          otel-cli exec --tp-carrier /tmp/otel/traceparent.txt --name run-tests -- mvn test -Dcheckstyle.skip=true
 
-          # Child span: Build
-          otel-cli span start -n build-app -p $PARENT_PID --sockdir /tmp/otel
-          mvn clean package -DskipTests -Dcheckstyle.skip=true
-          otel-cli span end --sockdir /tmp/otel
-
-          # Child span: Test
-          otel-cli span start -n run-tests -p $PARENT_PID  --sockdir /tmp/otel
-          mvn test -Dcheckstyle.skip=true
-          otel-cli span end --sockdir /tmp/otel
-
-          # End parent span
-          kill $PARENT_PID
+      - name: End parent span
+        run: |
+          PARENT_PID=$(cat /tmp/otel/parent_pid.txt)
+          kill $PARENT_PID || true
