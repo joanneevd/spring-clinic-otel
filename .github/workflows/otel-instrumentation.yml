@@ -1,4 +1,4 @@
-name: OTEL Instrumented Workflow
+name: OTEL Job Tracing - Spring Petclinic
 
 on:
   push:
@@ -7,46 +7,40 @@ on:
   pull_request:
 
 jobs:
-  build-and-run:
+  build-and-test:
     runs-on: ubuntu-latest
 
     env:
-      OTEL_SERVICE_NAME: petclinic-workflow
       OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DT_OTLP_ENDPOINT }}
       OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token ${{ secrets.DT_API_TOKEN }}"
-      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_SERVICE_NAME: spring-petclinic-workflow
 
     steps:
       - name: Checkout code
-        run: otel-cli exec -- git checkout $GITHUB_REF
-          
+        uses: actions/checkout@v3
+
       - name: Set up JDK 17
-        run: otel-cli exec -- |
-          sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk
-          
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
       - name: Cache Maven packages
-        run: otel-cli exec -- |
-          mkdir -p ~/.m2/repository
-          echo "Maven cache ready"
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
-      - name: Build with Maven
-        run: otel-cli exec -- mvn clean package -DskipTests
+      - name: Install otel-cli
+        run: |
+          curl -sSL https://github.com/open-telemetry/opentelemetry-cli/releases/latest/download/otel-cli_linux_amd64.tar.gz | tar -xz -C /usr/local/bin
 
-      - name: Run Spring Petclinic with OTEL agent
-        run: otel-cli exec -- |
-          nohup java -javaagent:opentelemetry-javaagent.jar \
-          -jar target/spring-petclinic-4.0.0-SNAPSHOT.jar > petclinic.log 2>&1 &
-          echo $! > petclinic.pid
-          sleep 30
+      - name: Build Spring Petclinic
+        run: |
+          otel-cli exec --name build-app -- mvn clean package -DskipTests
 
-      - name: Smoke test
-        run: otel-cli exec -- curl -f http://10.12.160.115:8080/ || exit 1
-
-      - name: Stop Spring Petclinic
-        if: always()
-        run: otel-cli exec -- |
-          if [ -f petclinic.pid ]; then
-            kill $(cat petclinic.pid) || true
-            rm petclinic.pid
-          fi
+      - name: Run Tests
+        run: |
+          otel-cli exec --name run-tests -- mvn test
