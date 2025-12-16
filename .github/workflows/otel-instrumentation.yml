@@ -40,8 +40,8 @@ jobs:
 
       - name: Build Spring Petclinic
         run: |
-          otel-cli exec --name build-app -- mvn clean package -DskipTests
+          /usr/local/bin/otel-cli start --name build-app -- mvn clean package -DskipTests
 
       - name: Run Tests
         run: |
-          otel-cli exec --name run-tests -- mvn test
+          /usr/local/bin/otel-cli start --name run-tests -- mvn test
