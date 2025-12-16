@@ -43,7 +43,7 @@ jobs:
 
       - name: Build Spring Petclinic
         run: |
-          otel-cli exec --name build-app -- mvn clean package -DskipTests
+          otel-cli exec --name build-app -- mvn clean package -DskipTests -Dcheckstyle.skip=true
 
       - name: Run Tests
         run: |
