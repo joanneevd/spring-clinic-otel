@@ -42,18 +42,22 @@ jobs:
 
       - name: Run Build and Test as a single Trace
         run: |
-          # Start parent span for entire workflow
-          otel-cli span start --name workflow-run --attributes "workflow.name=build-and-test"
+          
+          # Start parent span
+          otel-cli span start -n workflow-run -s spring-petclinic-workflow -a workflow.name=build-and-test &
+
+          # Capture parent span PID
+          PARENT_PID=$!
 
           # Child span: Build
-          otel-cli span start --name build-app
+          otel-cli span start -n build-app -p $PARENT_PID
           mvn clean package -DskipTests -Dcheckstyle.skip=true
           otel-cli span end
 
           # Child span: Test
-          otel-cli span start --name run-tests
+          otel-cli span start -n run-tests -p $PARENT_PID
           mvn test -Dcheckstyle.skip=true
           otel-cli span end
 
           # End parent span
-          otel-cli span end
+          kill $PARENT_PID
