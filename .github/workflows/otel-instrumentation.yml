@@ -7,12 +7,12 @@ on:
   pull_request:
 
 jobs:
-  build-and-instrument:
+  build-and-run:
     runs-on: ubuntu-latest
 
     env:
       OTEL_SERVICE_NAME: petclinic-workflow
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DT_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_ENDPOINT }}
       OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token ${{ secrets.DT_API_TOKEN }}"
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_METRICS_EXPORTER: otlp
@@ -45,6 +45,7 @@ jobs:
           nohup java -javaagent:opentelemetry-javaagent.jar \
           -jar target/spring-petclinic-4.0.0-SNAPSHOT.jar > petclinic.log 2>&1 &
           echo $! > petclinic.pid
+          echo "Waiting 30s for server to start..."
           sleep 30
 
       - name: Stop Spring Petclinic
