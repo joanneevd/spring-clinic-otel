@@ -48,7 +48,7 @@ jobs:
           sleep 30
 
       - name: Run smoke test (optional)
-        run: curl -f http://localhost:8080/ || exit 1
+        run: curl -f http://10.12.160.115:8080/ || exit 1
 
       - name: Stop Spring Petclinic
         if: always()
