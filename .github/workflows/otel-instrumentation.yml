@@ -42,22 +42,24 @@ jobs:
 
       - name: Run Build and Test as a single Trace
         run: |
-          
+          # buat folder socket
+          mkdir -p /tmp/otel
+
           # Start parent span
-          otel-cli span start -n workflow-run -s spring-petclinic-workflow -a workflow.name=build-and-test &
+          otel-cli span start -n workflow-run -s spring-petclinic-workflow -a workflow.name=build-and-test --sockdir /tmp/otel &
 
           # Capture parent span PID
           PARENT_PID=$!
 
           # Child span: Build
-          otel-cli span start -n build-app -p $PARENT_PID
+          otel-cli span start -n build-app -p $PARENT_PID --sockdir /tmp/otel
           mvn clean package -DskipTests -Dcheckstyle.skip=true
-          otel-cli span end
+          otel-cli span end --sockdir /tmp/otel
 
           # Child span: Test
-          otel-cli span start -n run-tests -p $PARENT_PID
+          otel-cli span start -n run-tests -p $PARENT_PID  --sockdir /tmp/otel
           mvn test -Dcheckstyle.skip=true
-          otel-cli span end
+          otel-cli span end --sockdir /tmp/otel
 
           # End parent span
           kill $PARENT_PID
