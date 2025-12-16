@@ -1,4 +1,4 @@
-name: OTEL Instrumentation
+name: OTEL Instrumented Workflow
 
 on:
   push:
@@ -12,45 +12,40 @@ jobs:
 
     env:
       OTEL_SERVICE_NAME: petclinic-workflow
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DT_OTLP_ENDPOINT }}
       OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token ${{ secrets.DT_API_TOKEN }}"
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_LOGS_EXPORTER: otlp
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-
+        run: otel-cli exec -- git checkout $GITHUB_REF
+          
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: temurin
-          java-version: 17
-
+        run: otel-cli exec -- |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk
+          
       - name: Cache Maven packages
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+        run: otel-cli exec -- |
+          mkdir -p ~/.m2/repository
+          echo "Maven cache ready"
 
       - name: Build with Maven
-        run: mvn clean package -DskipTests
+        run: otel-cli exec -- mvn clean package -DskipTests
 
       - name: Run Spring Petclinic with OTEL agent
-        run: |
+        run: otel-cli exec -- |
           nohup java -javaagent:opentelemetry-javaagent.jar \
           -jar target/spring-petclinic-4.0.0-SNAPSHOT.jar > petclinic.log 2>&1 &
           echo $! > petclinic.pid
-          echo "Waiting 30s for server to start..."
           sleep 30
+
+      - name: Smoke test
+        run: otel-cli exec -- curl -f http://10.12.160.115:8080/ || exit 1
 
       - name: Stop Spring Petclinic
         if: always()
-        run: |
+        run: otel-cli exec -- |
           if [ -f petclinic.pid ]; then
             kill $(cat petclinic.pid) || true
             rm petclinic.pid
