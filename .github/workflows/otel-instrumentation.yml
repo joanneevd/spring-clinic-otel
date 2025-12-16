@@ -35,7 +35,8 @@ jobs:
 
       - name: Install otel-cli
         run: |
-          curl -sSL https://github.com/open-telemetry/opentelemetry-cli/releases/latest/download/otel-cli_linux_amd64.tar.gz | tar -xz -C /usr/local/bin
+          curl -sSL -o /usr/local/bin/otel-cli https://github.com/open-telemetry/opentelemetry-cli/releases/latest/download/otel-cli_linux_amd64
+          chmod +x /usr/local/bin/otel-cli
 
       - name: Build Spring Petclinic
         run: |
