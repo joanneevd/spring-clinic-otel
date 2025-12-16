@@ -1,0 +1,59 @@
+name: OTEL Instrumentation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-instrument:
+    runs-on: ubuntu-latest
+
+    env:
+      OTEL_SERVICE_NAME: spring-petclinic
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://10.12.160.117:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+      - name: Run Spring Petclinic with OTEL agent
+        run: |
+          nohup java -javaagent:opentelemetry-javaagent.jar \
+          -jar target/spring-petclinic-4.0.0-SNAPSHOT.jar > petclinic.log 2>&1 &
+          echo $! > petclinic.pid
+          echo "Waiting 30s for server to start..."
+          sleep 30
+
+      - name: Run smoke test (optional)
+        run: curl -f http://localhost:8080/ || exit 1
+
+      - name: Stop Spring Petclinic
+        if: always()
+        run: |
+          if [ -f petclinic.pid ]; then
+            kill $(cat petclinic.pid) || true
+            rm petclinic.pid
+          fi
