@@ -40,11 +40,20 @@ jobs:
           chmod +x otel-cli
           sudo mv otel-cli /usr/local/bin/
 
-
-      - name: Build Spring Petclinic
+      - name: Run Build and Test as a single Trace
         run: |
-          otel-cli exec --name build-app -- bash -c "mvn clean package -DskipTests -Dcheckstyle.skip=true"
+          # Start parent span for entire workflow
+          otel-cli span start --name workflow-run --attributes "workflow.name=build-and-test"
 
-      - name: Run Tests
-        run: |
-          otel-cli exec --name run-tests -- bash -c "mvn test"
+          # Child span: Build
+          otel-cli span start --name build-app
+          mvn clean package -DskipTests -Dcheckstyle.skip=true
+          otel-cli span end
+
+          # Child span: Test
+          otel-cli span start --name run-tests
+          mvn test -Dcheckstyle.skip=true
+          otel-cli span end
+
+          # End parent span
+          otel-cli span end
