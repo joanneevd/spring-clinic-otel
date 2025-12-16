@@ -35,13 +35,16 @@ jobs:
 
       - name: Install otel-cli
         run: |
-          curl -sSL -o /usr/local/bin/otel-cli https://github.com/open-telemetry/opentelemetry-cli/releases/latest/download/otel-cli_linux_amd64
-          chmod +x /usr/local/bin/otel-cli
+          wget https://github.com/equinix-labs/otel-cli/releases/download/v0.4.1/otel-cli_0.4.1_linux_amd64.tar.gz
+          tar -xzf otel-cli_0.4.1_linux_amd64.tar.gz
+          chmod +x otel-cli
+          sudo mv otel-cli /usr/local/bin/
+
 
       - name: Build Spring Petclinic
         run: |
-          /usr/local/bin/otel-cli start --name build-app -- mvn clean package -DskipTests
+          otel-cli exec --name build-app -- mvn clean package -DskipTests
 
       - name: Run Tests
         run: |
-          /usr/local/bin/otel-cli start --name run-tests -- mvn test
+          otel-cli exec --name run-tests -- mvn test
