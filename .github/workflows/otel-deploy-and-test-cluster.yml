@@ -1,0 +1,51 @@
+name: Deploy and Test Cluster (OTEL)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'k8s/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'k8s/**'
+
+jobs:
+  deploy-and-test-cluster:
+    runs-on: ubuntu-latest
+
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DT_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token ${{ secrets.DT_API_TOKEN }}"
+      OTEL_SERVICE_NAME: k8s-deploy-ci
+
+    steps:
+      # ⭐ PALING PENTING
+      - name: Instrument GitHub Job with OpenTelemetry
+        uses: plengauer/opentelemetry-github/actions/instrument/job@v5
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Create Kind Cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: demo-ci
+
+      - name: Deploy application to cluster
+        run: |
+          kubectl apply -f k8s/
+
+      - name: Wait for Database Pod
+        run: |
+          kubectl wait --for=condition=ready pod -l app=demo-db --timeout=180s
+
+      - name: Wait for Petclinic Pod
+        run: |
+          kubectl wait --for=condition=ready pod -l app=petclinic --timeout=180s
+
+      # 🔥 Optional demo failure
+      - name: Demo failure if pods not healthy
+        run: |
+          kubectl get pods
+          kubectl get events --sort-by=.metadata.creationTimestamp
