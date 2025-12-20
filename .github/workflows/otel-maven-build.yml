@@ -1,0 +1,60 @@
+name: Java CI with Maven (OTEL)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        java: [ '17' ]
+
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DT_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token ${{ secrets.DT_API_TOKEN }}"
+      OTEL_SERVICE_NAME: java-maven-ci
+
+    steps:
+      # ⭐ PALING PENTING – OTEL INSTRUMENTATION
+      - name: Instrument GitHub Job with OpenTelemetry
+        uses: plengauer/opentelemetry-github/actions/instrument/job@v5
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build & Test with Maven Wrapper
+        run: ./mvnw -B verify
+
+      # 🔥 DEMO FAILED STEP (INTENTIONAL)
+      - name: Demo failure - simulate CI error
+        run: |
+          echo "=================================="
+          echo "Simulating CI failure for demo"
+          echo "This step is intentionally failing"
+          echo "=================================="
+          exit 1
+
+      # 🔍 COLLECT INFO (TETAP JALAN MESKI FAIL)
+      - name: Collect debug info
+        if: always()
+        run: |
+          echo "Job finished with status: ${{ job.status }}"
+          java -version
+          mvn -version
