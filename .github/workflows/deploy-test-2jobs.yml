@@ -28,7 +28,7 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
         with:
-          version: '1.28.0'
+          version: 'latest'
 
       - name: Deploy Applications
         run: |
