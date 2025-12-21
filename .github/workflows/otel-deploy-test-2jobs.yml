@@ -1,0 +1,85 @@
+name: Deploy and Test Cluster (2jobs + OTel)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy-cluster:
+    runs-on: ubuntu-latest
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DT_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token ${{ secrets.DT_API_TOKEN }}"
+      OTEL_SERVICE_NAME: k8s-deploy-ci
+    outputs:
+      cluster-name: ${{ steps.set-cluster-name.outputs.cluster-name }}
+    steps:
+      # ⭐ PENTING: instrumentasi job harus di awal
+      - name: Instrument GitHub Job with OpenTelemetry
+        uses: plengauer/opentelemetry-github/actions/instrument/job@v5
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Kubernetes Cluster with Kind
+        id: create-cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster-name: demo-cluster
+
+      - name: Set output cluster name
+        id: set-cluster-name
+        run: echo "cluster-name=demo-cluster" >> $GITHUB_OUTPUT
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Deploy Applications
+        run: |
+          kubectl apply -f k8s/
+          kubectl get pods -A
+
+      - name: Wait for Pods Ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app=demo-db --timeout=180s
+          kubectl wait --for=condition=ready pod -l app=petclinic --timeout=180s
+
+  test-application:
+    runs-on: ubuntu-latest
+    needs: deploy-cluster
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DT_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token ${{ secrets.DT_API_TOKEN }}"
+      OTEL_SERVICE_NAME: k8s-test-ci
+    steps:
+      # ⭐ PENTING: instrumentasi job harus di awal
+      - name: Instrument GitHub Job with OpenTelemetry
+        uses: plengauer/opentelemetry-github/actions/instrument/job@v5
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Run basic tests on app
+        run: |
+          kubectl get pods
+          kubectl exec deploy/petclinic -- curl -s http://localhost:8080/actuator/health | grep UP
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Run integration tests
+        run: |
+          pip install -r tests/requirements.txt
+          pytest tests/integration/
+
