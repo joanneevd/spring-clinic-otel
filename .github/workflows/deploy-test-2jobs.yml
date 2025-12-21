@@ -10,7 +10,7 @@ jobs:
   deploy-cluster:
     runs-on: ubuntu-latest
     outputs:
-      cluster-name: ${{ steps.create-cluster.outputs.cluster-name }}
+      cluster-name: ${{ steps.set-cluster-name.outputs.cluster-name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -20,8 +20,10 @@ jobs:
         uses: helm/kind-action@v1
         with:
           cluster-name: demo-cluster
-        # bisa menambahkan output kalau perlu
-        run: echo "::set-output name=cluster-name::demo-cluster"
+
+      - name: Set output cluster name
+        id: set-cluster-name
+        run: echo "cluster-name=demo-cluster" >> $GITHUB_OUTPUT
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
@@ -55,10 +57,12 @@ jobs:
           kubectl get pods
           kubectl exec deploy/petclinic -- curl -s http://localhost:8080/actuator/health | grep UP
 
-      - name: Run integration tests
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - run: |
+
+      - name: Run integration tests
+        run: |
           pip install -r tests/requirements.txt
           pytest tests/integration/
