@@ -1,0 +1,62 @@
+name: OTEL Job Tracing - Spring Petclinic
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    env:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DT_OTLP_ENDPOINT }}
+      OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token ${{ secrets.DT_API_TOKEN }}"
+      OTEL_SERVICE_NAME: spring-petclinic-workflow
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Install otel-cli
+        run: |
+          wget https://github.com/equinix-labs/otel-cli/releases/download/v0.4.1/otel-cli_0.4.1_linux_amd64.tar.gz
+          tar -xzf otel-cli_0.4.1_linux_amd64.tar.gz
+          chmod +x otel-cli
+          sudo mv otel-cli /usr/local/bin/
+
+      - name: Start parent span
+        run: |
+          mkdir -p /tmp/otel
+          otel-cli span background --name workflow-run --service spring-petclinic-workflow --tp-carrier /tmp/otel/traceparent.txt &
+          echo $! > /tmp/otel/parent_pid.txt
+          sleep 2
+
+      - name: Build Spring Petclinic (child span)
+        run: |
+          PARENT_PID=$(cat /tmp/otel/parent_pid.txt)
+          otel-cli exec --tp-carrier /tmp/otel/traceparent.txt --name build-app -- mvn clean package -DskipTests -Dcheckstyle.skip=true
+
+      - name: Run Tests (child span)
+        run: |
+          otel-cli exec --tp-carrier /tmp/otel/traceparent.txt --name run-tests -- mvn test -Dcheckstyle.skip=true
+
+      - name: End parent span
+        run: |
+          PARENT_PID=$(cat /tmp/otel/parent_pid.txt)
+          kill $PARENT_PID || true
